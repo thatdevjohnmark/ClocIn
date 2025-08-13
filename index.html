@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ClockIn - Time Tracking App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* GitHub-style CSS Variables */
+        :root {
+            --color-bg-primary: #ffffff;
+            --color-bg-secondary: #f6f8fa;
+            --color-bg-tertiary: #ffffff;
+            --color-bg-overlay: #ffffff;
+            --color-border-primary: #d0d7de;
+            --color-border-secondary: #d0d7de;
+            --color-text-primary: #24292f;
+            --color-text-secondary: #656d76;
+            --color-text-tertiary: #656d76;
+            --color-accent-fg: #0969da;
+            --color-accent-emphasis: #0969da;
+            --color-success-fg: #1a7f37;
+            --color-danger-fg: #cf222e;
+            --color-attention-fg: #9a6700;
+            --shadow-small: 0 1px 0 rgba(27,31,36,0.04);
+            --shadow-medium: 0 3px 6px rgba(140,149,159,0.15);
+            --shadow-large: 0 8px 24px rgba(140,149,159,0.2);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+        }
+
+        [data-theme="dark"] {
+            --color-bg-primary: #0d1117;
+            --color-bg-secondary: #161b22;
+            --color-bg-tertiary: #21262d;
+            --color-bg-overlay: #21262d;
+            --color-border-primary: #30363d;
+            --color-border-secondary: #21262d;
+            --color-text-primary: #f0f6fc;
+            --color-text-secondary: #7d8590;
+            --color-text-tertiary: #7d8590;
+            --color-accent-fg: #58a6ff;
+            --color-accent-emphasis: #1f6feb;
+            --color-success-fg: #3fb950;
+            --color-danger-fg: #f85149;
+            --color-attention-fg: #d29922;
+            --shadow-small: 0 1px 0 rgba(1,4,9,0.3);
+            --shadow-medium: 0 3px 6px rgba(1,4,9,0.3);
+            --shadow-large: 0 8px 24px rgba(1,4,9,0.3);
+        }
+
+        /* GitHub-style Base Styles */
+        * {
+            font-family: var(--font-family);
+        }
+
+        body {
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            transition: background-color 0.2s ease, color 0.2s ease;
+            line-height: 1.5;
+        }
+
+        /* GitHub-style Header */
+        .github-header {
+            background-color: var(--color-bg-primary);
+            border-bottom: 1px solid var(--color-border-primary);
+            box-shadow: var(--shadow-small);
+        }
+
+        .github-header-content {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .github-logo {
+            display: flex;
+            align-items: center;
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            text-decoration: none;
+        }
+
+        .github-logo i {
+            color: var(--color-accent-fg);
+            margin-right: 8px;
+        }
+
+        .github-nav {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* GitHub-style Buttons */
+        .github-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 20px;
+            border: 1px solid var(--color-border-primary);
+            border-radius: 6px;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .github-btn:hover {
+            background-color: var(--color-bg-secondary);
+            border-color: var(--color-border-secondary);
+        }
+
+        .github-btn-primary {
+            background-color: var(--color-accent-emphasis);
+            border-color: var(--color-accent-emphasis);
+            color: white;
+        }
+
+        .github-btn-primary:hover {
+            background-color: var(--color-accent-fg);
+            border-color: var(--color-accent-fg);
+        }
+
+        .github-btn-danger {
+            background-color: var(--color-danger-fg);
+            border-color: var(--color-danger-fg);
+            color: white;
+        }
+
+        .github-btn-danger:hover {
+            background-color: #a40e26;
+            border-color: #a40e26;
+        }
+
+        /* GitHub-style Container */
+        .github-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 24px 16px;
+        }
+
+        /* GitHub-style Cards */
+        .github-card {
+            background-color: var(--color-bg-primary);
+            border: 1px solid var(--color-border-primary);
+            border-radius: 6px;
+            box-shadow: var(--shadow-small);
+        }
+
+        .github-card-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--color-border-primary);
+            background-color: var(--color-bg-secondary);
+        }
+
+        .github-card-body {
+            padding: 16px;
+        }
+
+        /* GitHub-style Forms */
+        .github-form-group {
+            margin-bottom: 16px;
+        }
+
+        .github-form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text-primary);
+        }
+
+        .github-form-input {
+            width: 100%;
+            padding: 5px 12px;
+            font-size: 14px;
+            line-height: 20px;
+            border: 1px solid var(--color-border-primary);
+            border-radius: 6px;
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            transition: border-color 0.15s ease-in-out;
+        }
+
+        .github-form-input:focus {
+            outline: none;
+            border-color: var(--color-accent-emphasis);
+            box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.1);
+        }
+
+        /* GitHub-style Tables */
+        .github-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .github-table th {
+            padding: 8px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            border-bottom: 1px solid var(--color-border-primary);
+            background-color: var(--color-bg-secondary);
+        }
+
+        .github-table td {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--color-border-secondary);
+            color: var(--color-text-primary);
+        }
+
+        .github-table tr:hover {
+            background-color: var(--color-bg-secondary);
+        }
+
+        /* GitHub-style Status Badges */
+        .github-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            border-radius: 12px;
+            line-height: 16px;
+        }
+
+        .github-badge-success {
+            background-color: #dafbe1;
+            color: #1a7f37;
+        }
+
+        [data-theme="dark"] .github-badge-success {
+            background-color: #1c532c;
+            color: #3fb950;
+        }
+
+        .github-badge-warning {
+            background-color: #fff8c5;
+            color: #9a6700;
+        }
+
+        [data-theme="dark"] .github-badge-warning {
+            background-color: #3c2e05;
+            color: #d29922;
+        }
+
+        .github-badge-danger {
+            background-color: #ffebe9;
+            color: #cf222e;
+        }
+
+        [data-theme="dark"] .github-badge-danger {
+            background-color: #3c1e1e;
+            color: #f85149;
+        }
+
+        /* GitHub-style Grid */
+        .github-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .github-grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .github-grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        /* GitHub-style Stats */
+        .github-stat {
+            text-align: center;
+            padding: 16px;
+        }
+
+        .github-stat-number {
+            font-size: 32px;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            line-height: 1;
+        }
+
+        .github-stat-label {
+            font-size: 14px;
+            color: var(--color-text-secondary);
+            margin-top: 4px;
+        }
+
+        /* GitHub-style Modal */
+        .github-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(1, 4, 9, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .github-modal {
+            background-color: var(--color-bg-primary);
+            border: 1px solid var(--color-border-primary);
+            border-radius: 6px;
+            box-shadow: var(--shadow-large);
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .github-modal-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--color-border-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .github-modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--color-text-primary);
+        }
+
+        .github-modal-close {
+            background: none;
+            border: none;
+            color: var(--color-text-secondary);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        .github-modal-close:hover {
+            background-color: var(--color-bg-secondary);
+        }
+
+        .github-modal-body {
+            padding: 16px;
+        }
+
+        /* GitHub-style Toast */
+        .github-toast {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background-color: var(--color-bg-primary);
+            border: 1px solid var(--color-border-primary);
+            border-radius: 6px;
+            box-shadow: var(--shadow-large);
+            padding: 12px 16px;
+            max-width: 400px;
+            z-index: 1001;
+        }
+
+        /* GitHub-style Activity Graph */
+        .github-activity-graph {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            padding: 12px;
+            max-height: 160px;
+            overflow-y: auto;
+            background-color: var(--color-bg-primary);
+            border-radius: 6px;
+        }
+
+        .github-activity-day {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            background-color: #ebedf0;
+            border: none;
+            transition: all 0.2s ease;
+        }
+
+        [data-theme="dark"] .github-activity-day {
+            background-color: #161b22;
+        }
+
+        .github-activity-day.active-1 { background-color: #9be9a8; }
+        .github-activity-day.active-2 { background-color: #40c463; }
+        .github-activity-day.active-3 { background-color: #30a14e; }
+        .github-activity-day.active-4 { background-color: #216e39; }
+
+        [data-theme="dark"] .github-activity-day.active-1 { background-color: #0e4429; }
+        [data-theme="dark"] .github-activity-day.active-2 { background-color: #006d32; }
+        [data-theme="dark"] .github-activity-day.active-3 { background-color: #26a641; }
+        [data-theme="dark"] .github-activity-day.active-4 { background-color: #39d353; }
+
+        .github-activity-day:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .github-container {
+                padding: 16px;
+            }
+            
+            .github-grid-2,
+            .github-grid-3 {
+                grid-template-columns: 1fr;
+            }
+            
+            .github-header-content {
+                padding: 0 12px;
+            }
+            
+            .github-nav {
+                gap: 8px;
+            }
+        }
+
+        /* Mobile-friendly touch targets */
+        @media (max-width: 640px) {
+            button, input, select, textarea {
+                min-height: 44px;
+            }
+        }
+        
+        /* Prevent text selection on buttons */
+        button {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body data-theme="dark">
+    <!-- GitHub-style Header -->
+    <header class="github-header">
+        <div class="github-header-content">
+            <a href="#" class="github-logo">
+                <i class="fas fa-clock"></i>
+                <span>ClockIn</span>
+            </a>
+            <nav class="github-nav">
+                <button id="themeToggle" class="github-btn">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                </button>
+                <button id="loginBtn" class="github-btn">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Sign in
+                </button>
+                <button id="registerBtn" class="github-btn github-btn-primary">
+                    <i class="fas fa-user-plus mr-2"></i>Sign up
+                </button>
+                <button id="logoutBtn" class="github-btn hidden">
+                    <i class="fas fa-sign-out-alt mr-2"></i>Sign out
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="github-container">
+        <!-- Auth Forms -->
+        <div id="authForms" class="hidden">
+            <!-- Login Form -->
+            <div id="loginForm" class="github-card max-w-md mx-auto">
+                <div class="github-card-header">
+                    <h2 class="text-xl font-semibold">Sign in to ClockIn</h2>
+                </div>
+                <div class="github-card-body">
+                    <form id="loginFormElement">
+                        <div class="github-form-group">
+                            <label for="loginEmail" class="github-form-label">Email address</label>
+                            <input type="email" id="loginEmail" required class="github-form-input">
+                        </div>
+                        <div class="github-form-group">
+                            <label for="loginPassword" class="github-form-label">Password</label>
+                            <input type="password" id="loginPassword" required class="github-form-input">
+                        </div>
+                        <button type="submit" class="github-btn github-btn-primary w-full">
+                            Sign in
+                        </button>
+                    </form>
+                    <p class="mt-4 text-center text-sm" style="color: var(--color-text-secondary);">
+                        New to ClockIn? 
+                        <button id="showRegister" class="text-blue-600 hover:underline">Create an account</button>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="github-card max-w-md mx-auto hidden">
+                <div class="github-card-header">
+                    <h2 class="text-xl font-semibold">Create your account</h2>
+                </div>
+                <div class="github-card-body">
+                    <form id="registerFormElement">
+                        <div class="github-form-group">
+                            <label for="registerName" class="github-form-label">Full name</label>
+                            <input type="text" id="registerName" required class="github-form-input">
+                        </div>
+                        <div class="github-form-group">
+                            <label for="registerEmail" class="github-form-label">Email address</label>
+                            <input type="email" id="registerEmail" required class="github-form-input">
+                        </div>
+                        <div class="github-form-group">
+                            <label for="registerPassword" class="github-form-label">Password</label>
+                            <input type="password" id="registerPassword" required class="github-form-input">
+                        </div>
+                        <button type="submit" class="github-btn github-btn-primary w-full">
+                            Create account
+                        </button>
+                    </form>
+                    <p class="mt-4 text-center text-sm" style="color: var(--color-text-secondary);">
+                        Already have an account? 
+                        <button id="showLogin" class="text-blue-600 hover:underline">Sign in</button>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="hidden">
+            <!-- Welcome Section -->
+            <div class="github-card mb-6">
+                <div class="github-card-body">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h1 class="text-2xl font-semibold" id="userName">Welcome!</h1>
+                            <p class="text-sm" style="color: var(--color-text-secondary);" id="userEmail"></p>
+                        </div>
+                        <div class="mt-4 sm:mt-0">
+                            <p class="text-sm" style="color: var(--color-text-secondary);">Current Time</p>
+                            <p class="text-lg font-semibold" id="currentTime"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Time Tracking Controls -->
+            <div class="github-card mb-6">
+                <div class="github-card-header">
+                    <h3 class="text-lg font-semibold">Time Tracking</h3>
+                </div>
+                <div class="github-card-body">
+                    <div class="mb-4 text-center">
+                        <div id="businessHoursStatus" class="github-badge github-badge-warning inline-flex">
+                            <span id="businessHoursIcon" class="mr-2">●</span>
+                            <span id="businessHoursText">Checking business hours...</span>
+                        </div>
+                        <p class="text-sm mt-3" style="color: var(--color-text-secondary);">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            You can clock in early, but only business hours (8 AM - 12 PM, 1 PM - 5 PM) are counted
+                        </p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
+                        <button id="clockInBtn" class="github-btn github-btn-primary">
+                            <i class="fas fa-play mr-2"></i>Clock In
+                        </button>
+                        <button id="clockOutBtn" class="github-btn github-btn-danger" disabled>
+                            <i class="fas fa-stop mr-2"></i>Clock Out
+                        </button>
+                    </div>
+                    <div class="mt-6 text-center">
+                        <p class="text-sm" style="color: var(--color-text-secondary);">Current Session</p>
+                        <p class="text-3xl font-bold" id="sessionTimer">00:00:00</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="github-grid github-grid-3 mb-6">
+                <!-- Today's Summary -->
+                <div class="github-card">
+                    <div class="github-card-header">
+                        <h3 class="text-lg font-semibold">Today's Summary</h3>
+                    </div>
+                    <div class="github-card-body">
+                        <div class="github-grid github-grid-2">
+                            <div class="github-stat">
+                                <div class="github-stat-number" id="todayHours">0h</div>
+                                <div class="github-stat-label">Total Hours</div>
+                            </div>
+                            <div class="github-stat">
+                                <div class="github-stat-number" id="todaySessions">0</div>
+                                <div class="github-stat-label">Sessions</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activity Streak -->
+                <div class="github-card">
+                    <div class="github-card-header">
+                        <h3 class="text-lg font-semibold">Activity Streak</h3>
+                    </div>
+                    <div class="github-card-body">
+                        <div class="flex justify-between mb-4">
+                            <div class="text-center">
+                                <div class="github-stat-number" id="currentStreak">0</div>
+                                <div class="github-stat-label">Current</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="github-stat-number" id="longestStreak">0</div>
+                                <div class="github-stat-label">Longest</div>
+                            </div>
+                        </div>
+                        <div class="github-activity-graph" id="streakCalendar">
+                            <!-- Activity squares will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="github-card">
+                    <div class="github-card-header">
+                        <h3 class="text-lg font-semibold">Quick Actions</h3>
+                    </div>
+                    <div class="github-card-body">
+                        <div class="space-y-3">
+                            <button id="addSessionBtn" class="github-btn w-full">
+                                <i class="fas fa-plus mr-2"></i>Add Session
+                            </button>
+                            <button id="exportBtn" class="github-btn w-full">
+                                <i class="fas fa-download mr-2"></i>Export Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Sessions -->
+            <div class="github-card">
+                <div class="github-card-header">
+                    <h3 class="text-lg font-semibold">Recent Sessions</h3>
+                </div>
+                <div class="github-card-body">
+                    <div class="overflow-x-auto">
+                        <table class="github-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time Range</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sessionsTable">
+                                <!-- Sessions will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Session Modal -->
+    <div id="addSessionModal" class="github-modal-overlay hidden">
+        <div class="github-modal">
+            <div class="github-modal-header">
+                <h3 class="github-modal-title">Add New Session</h3>
+                <button id="closeAddSession" class="github-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="github-modal-body">
+                <form id="addSessionForm">
+                    <div class="github-form-group">
+                        <label for="sessionDate" class="github-form-label">Date</label>
+                        <input type="date" id="sessionDate" required class="github-form-input">
+                    </div>
+                    <div class="github-form-group">
+                        <label for="clockInTime" class="github-form-label">Clock In Time</label>
+                        <input type="time" id="clockInTime" required class="github-form-input">
+                    </div>
+                    <div class="github-form-group">
+                        <label for="clockOutTime" class="github-form-label">Clock Out Time</label>
+                        <input type="time" id="clockOutTime" class="github-form-input">
+                        <p class="text-xs mt-1" style="color: var(--color-text-secondary);">Leave empty for active session</p>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="closeAddSessionBtn" class="github-btn">Cancel</button>
+                        <button type="submit" class="github-btn github-btn-primary">Add Session</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast" class="github-toast hidden">
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="fas fa-check-circle text-green-500"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm font-medium" id="toastMessage"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
