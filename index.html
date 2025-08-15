@@ -280,6 +280,10 @@
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         }
 
+        .github-grid-4 {
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        }
+
         /* GitHub-style Stats */
         .github-stat {
             text-align: center;
@@ -588,7 +592,7 @@
             </div>
 
             <!-- Stats Grid -->
-            <div class="github-grid github-grid-3 mb-6">
+            <div class="github-grid github-grid-4 mb-6">
                 <!-- Today's Summary -->
                 <div class="github-card">
                     <div class="github-card-header">
@@ -604,6 +608,29 @@
                                 <div class="github-stat-number" id="todaySessions">0</div>
                                 <div class="github-stat-label">Sessions</div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Total Time Summary -->
+                <div class="github-card">
+                    <div class="github-card-header">
+                        <h3 class="text-lg font-semibold">Total Time Summary</h3>
+                    </div>
+                    <div class="github-card-body">
+                        <div class="github-grid github-grid-2">
+                            <div class="github-stat">
+                                <div class="github-stat-number" id="totalHours">0h</div>
+                                <div class="github-stat-label">Total Hours</div>
+                            </div>
+                            <div class="github-stat">
+                                <div class="github-stat-number" id="totalSessions">0</div>
+                                <div class="github-stat-label">Total Sessions</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 text-center">
+                            <div class="github-stat-number text-lg" id="totalTimeFormatted">00:00:00</div>
+                            <div class="github-stat-label">Total Time</div>
                         </div>
                     </div>
                 </div>
@@ -639,6 +666,9 @@
                         <div class="space-y-3">
                             <button id="addSessionBtn" class="github-btn w-full">
                                 <i class="fas fa-plus mr-2"></i>Add Session
+                            </button>
+                            <button id="importBtn" class="github-btn w-full">
+                                <i class="fas fa-upload mr-2"></i>Import Data
                             </button>
                             <button id="exportBtn" class="github-btn w-full">
                                 <i class="fas fa-download mr-2"></i>Export Data
@@ -704,6 +734,52 @@
                         <button type="submit" class="github-btn github-btn-primary">Add Session</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Data Modal -->
+    <div id="importModal" class="github-modal-overlay hidden">
+        <div class="github-modal">
+            <div class="github-modal-header">
+                <h3 class="github-modal-title">Import Data</h3>
+                <button id="closeImportModal" class="github-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="github-modal-body">
+                <div class="github-form-group">
+                    <label for="importFile" class="github-form-label">Select File</label>
+                    <input type="file" id="importFile" accept=".json,.csv" class="github-form-input">
+                    <p class="text-xs mt-1" style="color: var(--color-text-secondary);">
+                        Supported formats: JSON (ClockIn export), CSV
+                    </p>
+                </div>
+                <div class="github-form-group">
+                    <label class="github-form-label">Import Options</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="importOverwrite" class="mr-2">
+                            <span class="text-sm">Overwrite existing sessions</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="importSkipDuplicates" class="mr-2" checked>
+                            <span class="text-sm">Skip duplicate sessions</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="importPreview" class="github-form-group hidden">
+                    <label class="github-form-label">Import Preview</label>
+                    <div class="bg-gray-100 p-3 rounded text-sm" style="background-color: var(--color-bg-secondary);">
+                        <div id="importPreviewContent"></div>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="closeImportBtn" class="github-btn">Cancel</button>
+                    <button type="button" id="importDataBtn" class="github-btn github-btn-primary" disabled>
+                        Import Data
+                    </button>
+                </div>
             </div>
         </div>
     </div>

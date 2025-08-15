@@ -76,6 +76,13 @@ class ClockInApp {
         // Export
         document.getElementById('exportBtn').addEventListener('click', () => this.exportData());
         
+        // Import
+        document.getElementById('importBtn').addEventListener('click', () => this.showImportModal());
+        document.getElementById('closeImportModal').addEventListener('click', () => this.hideImportModal());
+        document.getElementById('closeImportBtn').addEventListener('click', () => this.hideImportModal());
+        document.getElementById('importFile').addEventListener('change', (e) => this.handleFileSelect(e));
+        document.getElementById('importDataBtn').addEventListener('click', () => this.handleImportData());
+        
         // Add Session
         document.getElementById('addSessionBtn').addEventListener('click', () => this.showAddSessionModal());
         document.getElementById('closeAddSession').addEventListener('click', () => this.hideAddSessionModal());
@@ -515,6 +522,7 @@ class ClockInApp {
         const sessions = await this.getSessions(this.currentUser.email, 20);
         this.displaySessions(sessions);
         this.updateStreakDisplay(sessions);
+        await this.updateTotalTimeSummary();
     }
 
     displaySessions(sessions) {
@@ -593,6 +601,22 @@ class ClockInApp {
         
         document.getElementById('todayHours').textContent = `${totalHours}h`;
         document.getElementById('todaySessions').textContent = sessionCount;
+        
+        // Update total time summary
+        await this.updateTotalTimeSummary();
+    }
+
+    async updateTotalTimeSummary() {
+        if (!this.currentUser) return;
+        
+        const allSessions = await this.getSessions(this.currentUser.email);
+        const totalSeconds = allSessions.reduce((sum, session) => sum + session.duration, 0);
+        const totalHours = this.formatHours(totalSeconds);
+        const totalSessions = allSessions.length;
+        
+        document.getElementById('totalHours').textContent = `${totalHours}h`;
+        document.getElementById('totalSessions').textContent = totalSessions;
+        document.getElementById('totalTimeFormatted').textContent = this.formatDuration(totalSeconds);
     }
 
     async checkForActiveSession() {
@@ -848,6 +872,279 @@ class ClockInApp {
         URL.revokeObjectURL(url);
         
         this.showToast('Data exported successfully!');
+    }
+
+    // Import functionality
+    showImportModal() {
+        const modal = document.getElementById('importModal');
+        modal.classList.remove('hidden');
+        
+        // Reset form
+        document.getElementById('importFile').value = '';
+        document.getElementById('importOverwrite').checked = false;
+        document.getElementById('importSkipDuplicates').checked = true;
+        document.getElementById('importPreview').classList.add('hidden');
+        document.getElementById('importDataBtn').disabled = true;
+        
+        // Clear any previous data
+        this.importData = null;
+    }
+
+    hideImportModal() {
+        const modal = document.getElementById('importModal');
+        modal.classList.add('hidden');
+        
+        // Clear data
+        this.importData = null;
+    }
+
+    async handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            const data = await this.parseImportFile(file);
+            this.importData = data;
+            
+            // Show preview
+            this.showImportPreview(data);
+            
+            // Enable import button
+            document.getElementById('importDataBtn').disabled = false;
+            
+        } catch (error) {
+            this.showToast('Error reading file: ' + error.message, 'error');
+            document.getElementById('importDataBtn').disabled = true;
+        }
+    }
+
+    async parseImportFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    
+                    if (file.name.endsWith('.json')) {
+                        // Parse JSON file (ClockIn export format)
+                        const data = JSON.parse(content);
+                        resolve(this.parseClockInJSON(data));
+                    } else if (file.name.endsWith('.csv')) {
+                        // Parse CSV file
+                        resolve(this.parseCSV(content));
+                    } else {
+                        reject(new Error('Unsupported file format'));
+                    }
+                } catch (error) {
+                    reject(new Error('Invalid file format: ' + error.message));
+                }
+            };
+            
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+    }
+
+    parseClockInJSON(data) {
+        // Handle ClockIn export format
+        if (data.sessions && Array.isArray(data.sessions)) {
+            return {
+                type: 'clockin',
+                sessions: data.sessions,
+                user: data.user,
+                totalSessions: data.sessions.length
+            };
+        } else if (Array.isArray(data)) {
+            // Handle array of sessions
+            return {
+                type: 'clockin',
+                sessions: data,
+                totalSessions: data.length
+            };
+        } else {
+            throw new Error('Invalid ClockIn export format');
+        }
+    }
+
+    parseCSV(content) {
+        const lines = content.split('\n').filter(line => line.trim());
+        const sessions = [];
+        
+        // Skip header if present
+        const startIndex = lines[0].toLowerCase().includes('date') ? 1 : 0;
+        
+        for (let i = startIndex; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            try {
+                const session = this.parseCSVLine(line);
+                if (session) {
+                    sessions.push(session);
+                }
+            } catch (error) {
+                console.warn(`Skipping invalid CSV line ${i + 1}:`, error.message);
+            }
+        }
+        
+        return {
+            type: 'csv',
+            sessions: sessions,
+            totalSessions: sessions.length
+        };
+    }
+
+    parseCSVLine(line) {
+        // Expected CSV format: Date,ClockIn,ClockOut,Duration
+        const parts = line.split(',').map(part => part.trim());
+        
+        if (parts.length < 3) return null;
+        
+        const [dateStr, clockInStr, clockOutStr, durationStr] = parts;
+        
+        // Parse date
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return null;
+        
+        // Parse clock in time
+        const clockInTime = clockInStr || '00:00';
+        const clockIn = new Date(date);
+        const [hours, minutes] = clockInTime.split(':').map(Number);
+        clockIn.setHours(hours, minutes, 0, 0);
+        
+        // Parse clock out time (optional)
+        let clockOut = null;
+        if (clockOutStr && clockOutStr !== '') {
+            const clockOutTime = clockOutStr;
+            clockOut = new Date(date);
+            const [outHours, outMinutes] = clockOutTime.split(':').map(Number);
+            clockOut.setHours(outHours, outMinutes, 0, 0);
+        }
+        
+        // Calculate duration
+        let duration = 0;
+        if (clockOut) {
+            duration = Math.floor((clockOut - clockIn) / 1000);
+        }
+        
+        return {
+            clockIn: clockIn.toISOString(),
+            clockOut: clockOut ? clockOut.toISOString() : null,
+            duration: duration,
+            date: date.toDateString()
+        };
+    }
+
+    showImportPreview(data) {
+        const previewDiv = document.getElementById('importPreview');
+        const contentDiv = document.getElementById('importPreviewContent');
+        
+        let previewHTML = `
+            <div class="mb-3">
+                <strong>File Type:</strong> ${data.type.toUpperCase()}
+            </div>
+            <div class="mb-3">
+                <strong>Total Sessions:</strong> ${data.totalSessions}
+            </div>
+        `;
+        
+        if (data.sessions.length > 0) {
+            previewHTML += '<div class="mb-2"><strong>Sample Sessions:</strong></div>';
+            const sampleSessions = data.sessions.slice(0, 3);
+            
+            sampleSessions.forEach((session, index) => {
+                const date = new Date(session.clockIn);
+                const clockIn = new Date(session.clockIn);
+                const clockOut = session.clockOut ? new Date(session.clockOut) : null;
+                
+                previewHTML += `
+                    <div class="text-xs mb-1">
+                        ${index + 1}. ${date.toLocaleDateString()} - 
+                        ${clockIn.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 
+                        ${clockOut ? `to ${clockOut.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : '(Active)'}
+                    </div>
+                `;
+            });
+            
+            if (data.sessions.length > 3) {
+                previewHTML += `<div class="text-xs text-gray-500">... and ${data.sessions.length - 3} more sessions</div>`;
+            }
+        }
+        
+        contentDiv.innerHTML = previewHTML;
+        previewDiv.classList.remove('hidden');
+    }
+
+    async handleImportData() {
+        if (!this.importData || !this.currentUser) return;
+        
+        const overwrite = document.getElementById('importOverwrite').checked;
+        const skipDuplicates = document.getElementById('importSkipDuplicates').checked;
+        
+        try {
+            let importedCount = 0;
+            let skippedCount = 0;
+            let overwrittenCount = 0;
+            
+            for (const session of this.importData.sessions) {
+                // Set the user ID to current user
+                const sessionToImport = {
+                    ...session,
+                    userId: this.currentUser.email
+                };
+                
+                // Check for duplicates if skipDuplicates is enabled
+                if (skipDuplicates) {
+                    const existingSessions = await this.getSessions(this.currentUser.email);
+                    const isDuplicate = existingSessions.some(existing => 
+                        existing.clockIn === sessionToImport.clockIn &&
+                        existing.clockOut === sessionToImport.clockOut
+                    );
+                    
+                    if (isDuplicate) {
+                        skippedCount++;
+                        continue;
+                    }
+                }
+                
+                // Check if session already exists (for overwrite logic)
+                const existingSessions = await this.getSessions(this.currentUser.email);
+                const existingSession = existingSessions.find(existing => 
+                    existing.clockIn === sessionToImport.clockIn
+                );
+                
+                if (existingSession && overwrite) {
+                    // Update existing session
+                    sessionToImport.id = existingSession.id;
+                    await this.updateSession(sessionToImport);
+                    overwrittenCount++;
+                } else if (!existingSession) {
+                    // Add new session
+                    await this.saveSession(sessionToImport);
+                    importedCount++;
+                } else {
+                    // Skip if exists and not overwriting
+                    skippedCount++;
+                }
+            }
+            
+            // Refresh the display
+            this.loadSessions();
+            this.updateTodaySummary();
+            
+            // Show results
+            let message = `Import completed! `;
+            if (importedCount > 0) message += `Imported: ${importedCount} `;
+            if (overwrittenCount > 0) message += `Updated: ${overwrittenCount} `;
+            if (skippedCount > 0) message += `Skipped: ${skippedCount}`;
+            
+            this.showToast(message);
+            this.hideImportModal();
+            
+        } catch (error) {
+            this.showToast('Import failed: ' + error.message, 'error');
+        }
     }
 
     // Utility methods
