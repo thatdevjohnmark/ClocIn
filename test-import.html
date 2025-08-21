@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClockIn Import Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .file-input {
+            margin: 20px 0;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ClockIn Import File Validator</h1>
+        <p>Use this tool to test your JSON file before importing it into ClockIn.</p>
+        
+        <div class="file-input">
+            <input type="file" id="fileInput" accept=".json" />
+            <button onclick="validateFile()">Validate File</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function validateFile() {
+            const fileInput = document.getElementById('fileInput');
+            const resultsDiv = document.getElementById('results');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('Please select a file first.', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const data = JSON.parse(content);
+                    
+                    const validation = validateClockInFormat(data);
+                    showValidationResults(validation);
+                    
+                } catch (error) {
+                    showResult('Invalid JSON file: ' + error.message, 'error');
+                }
+            };
+            
+            reader.onerror = function() {
+                showResult('Failed to read file.', 'error');
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        function validateClockInFormat(data) {
+            const validation = {
+                isValid: false,
+                errors: [],
+                warnings: [],
+                info: []
+            };
+            
+            // Check if it's an object
+            if (typeof data !== 'object' || data === null) {
+                validation.errors.push('Data must be a JSON object');
+                return validation;
+            }
+            
+            // Check for sessions array
+            if (data.sessions && Array.isArray(data.sessions)) {
+                validation.info.push(`Found ${data.sessions.length} sessions`);
+                
+                if (data.sessions.length > 0) {
+                    const firstSession = data.sessions[0];
+                    validateSession(firstSession, validation);
+                } else {
+                    validation.warnings.push('Sessions array is empty');
+                }
+            } else if (Array.isArray(data)) {
+                validation.info.push(`Found ${data.length} sessions (direct array format)`);
+                
+                if (data.length > 0) {
+                    validateSession(data[0], validation);
+                } else {
+                    validation.warnings.push('Sessions array is empty');
+                }
+            } else {
+                validation.errors.push('No sessions array found. Expected "sessions" property or direct array.');
+                return validation;
+            }
+            
+            // Check for user data
+            if (data.user) {
+                validation.info.push('User data found');
+                if (typeof data.user === 'object') {
+                    const userKeys = Object.keys(data.user);
+                    validation.info.push(`User has properties: ${userKeys.join(', ')}`);
+                }
+            } else {
+                validation.warnings.push('No user data found (this is optional)');
+            }
+            
+            // Check for export metadata
+            if (data.exportDate) {
+                validation.info.push(`Export date: ${data.exportDate}`);
+            }
+            
+            validation.isValid = validation.errors.length === 0;
+            return validation;
+        }
+        
+        function validateSession(session, validation) {
+            const requiredFields = ['userId', 'clockIn', 'duration', 'date'];
+            const optionalFields = ['clockOut', 'id'];
+            
+            requiredFields.forEach(field => {
+                if (session[field] === undefined) {
+                    validation.errors.push(`Missing required field: ${field}`);
+                } else {
+                    validation.info.push(`${field}: ${session[field]}`);
+                }
+            });
+            
+            optionalFields.forEach(field => {
+                if (session[field] !== undefined) {
+                    validation.info.push(`${field}: ${session[field]}`);
+                }
+            });
+            
+            // Validate data types
+            if (session.clockIn && typeof session.clockIn !== 'string') {
+                validation.errors.push('clockIn must be a string (ISO date)');
+            }
+            
+            if (session.duration !== undefined && typeof session.duration !== 'number') {
+                validation.errors.push('duration must be a number');
+            }
+            
+            if (session.userId && typeof session.userId !== 'string') {
+                validation.errors.push('userId must be a string');
+            }
+        }
+        
+        function showValidationResults(validation) {
+            const resultsDiv = document.getElementById('results');
+            let html = '';
+            
+            if (validation.isValid) {
+                html += '<div class="results success">';
+                html += '<h3>✅ File is valid for import!</h3>';
+            } else {
+                html += '<div class="results error">';
+                html += '<h3>❌ File has validation errors</h3>';
+            }
+            
+            if (validation.errors.length > 0) {
+                html += '<h4>Errors:</h4><ul>';
+                validation.errors.forEach(error => {
+                    html += `<li>${error}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            if (validation.warnings.length > 0) {
+                html += '<h4>Warnings:</h4><ul>';
+                validation.warnings.forEach(warning => {
+                    html += `<li>${warning}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            if (validation.info.length > 0) {
+                html += '<h4>File Information:</h4><ul>';
+                validation.info.forEach(info => {
+                    html += `<li>${info}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+        
+        function showResult(message, type) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="results ${type}">${message}</div>`;
+        }
+    </script>
+</body>
+</html>
