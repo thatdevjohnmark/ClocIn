@@ -375,23 +375,21 @@
 
         /* GitHub-style Activity Graph */
         .github-activity-graph {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 2px;
             padding: 12px;
-            max-height: 160px;
-            overflow-y: auto;
+            max-height: 200px;
+            overflow: hidden;
             background-color: var(--color-bg-primary);
             border-radius: 6px;
         }
 
         .github-activity-day {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 2px;
             background-color: #ebedf0;
             border: none;
             transition: all 0.2s ease;
+            flex-shrink: 0;
         }
 
         [data-theme="dark"] .github-activity-day {
@@ -407,6 +405,31 @@
         [data-theme="dark"] .github-activity-day.active-2 { background-color: #006d32; }
         [data-theme="dark"] .github-activity-day.active-3 { background-color: #26a641; }
         [data-theme="dark"] .github-activity-day.active-4 { background-color: #39d353; }
+
+        /* Internship Progress Colors */
+        .github-activity-day.missed-day { 
+            background-color: #f85149; 
+        }
+        
+        .github-activity-day.future-day { 
+            background-color: #d0d7de; 
+        }
+        
+        .github-activity-day.weekend-day { 
+            background-color: #f6f8fa; 
+        }
+
+        [data-theme="dark"] .github-activity-day.missed-day { 
+            background-color: #f85149; 
+        }
+        
+        [data-theme="dark"] .github-activity-day.future-day { 
+            background-color: #30363d; 
+        }
+        
+        [data-theme="dark"] .github-activity-day.weekend-day { 
+            background-color: #161b22; 
+        }
 
         .github-activity-day:hover {
             transform: scale(1.2);
@@ -635,24 +658,24 @@
                     </div>
                 </div>
 
-                <!-- Activity Streak -->
+                <!-- Internship Progress -->
                 <div class="github-card">
                     <div class="github-card-header">
-                        <h3 class="text-lg font-semibold">Activity Streak</h3>
+                        <h3 class="text-lg font-semibold">Internship Progress</h3>
                     </div>
                     <div class="github-card-body">
                         <div class="flex justify-between mb-4">
                             <div class="text-center">
                                 <div class="github-stat-number" id="currentStreak">0</div>
-                                <div class="github-stat-label">Current</div>
+                                <div class="github-stat-label">Completed Days</div>
                             </div>
                             <div class="text-center">
                                 <div class="github-stat-number" id="longestStreak">0</div>
-                                <div class="github-stat-label">Longest</div>
+                                <div class="github-stat-label">Goal Days</div>
                             </div>
                         </div>
                         <div class="github-activity-graph" id="streakCalendar">
-                            <!-- Activity squares will be populated here -->
+                            <!-- Internship progress squares will be populated here -->
                         </div>
                     </div>
                 </div>
@@ -672,6 +695,12 @@
                             </button>
                             <button id="exportBtn" class="github-btn w-full">
                                 <i class="fas fa-download mr-2"></i>Export Data
+                            </button>
+                            <button id="setInternshipDateBtn" class="github-btn w-full">
+                                <i class="fas fa-calendar mr-2"></i>Set Internship Start Date
+                            </button>
+                            <button id="setGoalDaysBtn" class="github-btn w-full">
+                                <i class="fas fa-target mr-2"></i>Set Goal Days
                             </button>
                         </div>
                     </div>
@@ -732,6 +761,56 @@
                     <div class="flex justify-end space-x-3">
                         <button type="button" id="closeAddSessionBtn" class="github-btn">Cancel</button>
                         <button type="submit" class="github-btn github-btn-primary">Add Session</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Internship Date Modal -->
+    <div id="internshipDateModal" class="github-modal-overlay hidden">
+        <div class="github-modal">
+            <div class="github-modal-header">
+                <h3 class="github-modal-title">Set Internship Start Date</h3>
+                <button id="closeInternshipDate" class="github-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="github-modal-body">
+                <form id="internshipDateForm">
+                    <div class="github-form-group">
+                        <label for="internshipStartDate" class="github-form-label">Internship Start Date</label>
+                        <input type="date" id="internshipStartDate" required class="github-form-input">
+                        <p class="text-xs mt-1" style="color: var(--color-text-secondary);">This will be used to calculate your internship progress</p>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="closeInternshipDateBtn" class="github-btn">Cancel</button>
+                        <button type="submit" class="github-btn github-btn-primary">Set Date</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Days Modal -->
+    <div id="goalDaysModal" class="github-modal-overlay hidden">
+        <div class="github-modal">
+            <div class="github-modal-header">
+                <h3 class="github-modal-title">Set Goal Days</h3>
+                <button id="closeGoalDays" class="github-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="github-modal-body">
+                <form id="goalDaysForm">
+                    <div class="github-form-group">
+                        <label for="goalDays" class="github-form-label">Number of Goal Days</label>
+                        <input type="number" id="goalDays" min="1" max="365" required class="github-form-input">
+                        <p class="text-xs mt-1" style="color: var(--color-text-secondary);">Enter the total number of days you need to complete your internship</p>
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" id="closeGoalDaysBtn" class="github-btn">Cancel</button>
+                        <button type="submit" class="github-btn github-btn-primary">Set Goal</button>
                     </div>
                 </form>
             </div>

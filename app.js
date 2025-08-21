@@ -18,8 +18,10 @@ class ClockInApp {
         this.checkAuthStatus();
         this.initTheme();
         
-        // Add sample data for testing
-        await this.addSampleData();
+        // Only add sample data in development mode
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            await this.addSampleData();
+        }
     }
 
     // Database initialization
@@ -87,6 +89,18 @@ class ClockInApp {
         document.getElementById('addSessionBtn').addEventListener('click', () => this.showAddSessionModal());
         document.getElementById('closeAddSession').addEventListener('click', () => this.hideAddSessionModal());
         document.getElementById('addSessionForm').addEventListener('submit', (e) => this.handleAddSession(e));
+        
+        // Internship Date
+        document.getElementById('setInternshipDateBtn').addEventListener('click', () => this.showInternshipDateModal());
+        document.getElementById('closeInternshipDate').addEventListener('click', () => this.hideInternshipDateModal());
+        document.getElementById('closeInternshipDateBtn').addEventListener('click', () => this.hideInternshipDateModal());
+        document.getElementById('internshipDateForm').addEventListener('submit', (e) => this.handleInternshipDateSubmit(e));
+        
+        // Goal Days
+        document.getElementById('setGoalDaysBtn').addEventListener('click', () => this.showGoalDaysModal());
+        document.getElementById('closeGoalDays').addEventListener('click', () => this.hideGoalDaysModal());
+        document.getElementById('closeGoalDaysBtn').addEventListener('click', () => this.hideGoalDaysModal());
+        document.getElementById('goalDaysForm').addEventListener('submit', (e) => this.handleGoalDaysSubmit(e));
         
         // Dark mode toggle
         document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
@@ -888,6 +902,53 @@ class ClockInApp {
         
         // Clear any previous data
         this.importData = null;
+        
+        // Add debug button if not already present
+        this.addDebugButton();
+    }
+    
+    addDebugButton() {
+        const modalBody = document.querySelector('#importModal .github-modal-body');
+        if (!modalBody) return;
+        
+        // Check if debug button already exists
+        if (document.getElementById('debugImportBtn')) return;
+        
+        const debugBtn = document.createElement('button');
+        debugBtn.id = 'debugImportBtn';
+        debugBtn.textContent = 'Debug Import';
+        debugBtn.className = 'github-btn github-btn-danger mt-2';
+        debugBtn.onclick = () => this.debugImport();
+        
+        modalBody.appendChild(debugBtn);
+    }
+    
+    debugImport() {
+        const fileInput = document.getElementById('importFile');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert('Please select a file first');
+            return;
+        }
+        
+        console.log('=== IMPORT DEBUG START ===');
+        console.log('File name:', file.name);
+        console.log('File size:', file.size, 'bytes');
+        console.log('File type:', file.type);
+        console.log('Current user:', this.currentUser);
+        console.log('Import data:', this.importData);
+        
+        if (this.importData) {
+            console.log('Import data structure:', {
+                type: this.importData.type,
+                totalSessions: this.importData.totalSessions,
+                sessionsLength: this.importData.sessions.length,
+                sampleSession: this.importData.sessions[0]
+            });
+        }
+        
+        console.log('=== IMPORT DEBUG END ===');
     }
 
     hideImportModal() {
@@ -902,19 +963,37 @@ class ClockInApp {
         const file = e.target.files[0];
         if (!file) return;
 
+        console.log('File selected:', file.name, 'Size:', file.size, 'bytes');
+
         try {
+            // Show loading state
+            const importBtn = document.getElementById('importDataBtn');
+            importBtn.disabled = true;
+            importBtn.textContent = 'Processing...';
+            
             const data = await this.parseImportFile(file);
             this.importData = data;
+            
+            console.log('Import data processed successfully:', data);
             
             // Show preview
             this.showImportPreview(data);
             
             // Enable import button
-            document.getElementById('importDataBtn').disabled = false;
+            importBtn.disabled = false;
+            importBtn.textContent = 'Import Data';
             
         } catch (error) {
+            console.error('Import error:', error);
             this.showToast('Error reading file: ' + error.message, 'error');
-            document.getElementById('importDataBtn').disabled = true;
+            
+            // Reset button state
+            const importBtn = document.getElementById('importDataBtn');
+            importBtn.disabled = true;
+            importBtn.textContent = 'Import Data';
+            
+            // Hide preview
+            document.getElementById('importPreview').classList.add('hidden');
         }
     }
 
@@ -947,24 +1026,108 @@ class ClockInApp {
     }
 
     parseClockInJSON(data) {
+        console.log('Parsing ClockIn JSON data:', data);
+        
         // Handle ClockIn export format
         if (data.sessions && Array.isArray(data.sessions)) {
+            console.log('Found sessions array with', data.sessions.length, 'sessions');
+            
+            // Validate and fix session data
+            const validatedSessions = data.sessions.map((session, index) => {
+                try {
+                    return this.validateAndFixSession(session, index);
+                } catch (error) {
+                    console.warn(`Session ${index} validation failed:`, error.message);
+                    return null;
+                }
+            }).filter(session => session !== null);
+            
+            console.log(`Validated ${validatedSessions.length} sessions out of ${data.sessions.length}`);
+            
             return {
                 type: 'clockin',
-                sessions: data.sessions,
+                sessions: validatedSessions,
                 user: data.user,
-                totalSessions: data.sessions.length
+                totalSessions: validatedSessions.length
             };
         } else if (Array.isArray(data)) {
             // Handle array of sessions
+            console.log('Found direct sessions array with', data.length, 'sessions');
+            
+            // Validate and fix session data
+            const validatedSessions = data.map((session, index) => {
+                try {
+                    return this.validateAndFixSession(session, index);
+                } catch (error) {
+                    console.warn(`Session ${index} validation failed:`, error.message);
+                    return null;
+                }
+            }).filter(session => session !== null);
+            
+            console.log(`Validated ${validatedSessions.length} sessions out of ${data.length}`);
+            
             return {
                 type: 'clockin',
-                sessions: data,
-                totalSessions: data.length
+                sessions: validatedSessions,
+                totalSessions: validatedSessions.length
             };
         } else {
-            throw new Error('Invalid ClockIn export format');
+            console.error('Invalid data structure:', data);
+            throw new Error('Invalid ClockIn export format. Expected "sessions" array or direct sessions array.');
         }
+    }
+    
+    validateAndFixSession(session, index) {
+        // Create a copy to avoid modifying original
+        const fixedSession = { ...session };
+        
+        // Ensure required fields exist
+        if (!fixedSession.userId) {
+            throw new Error('Missing userId');
+        }
+        
+        if (!fixedSession.clockIn) {
+            throw new Error('Missing clockIn');
+        }
+        
+        // Validate and fix clockIn date
+        try {
+            const clockInDate = new Date(fixedSession.clockIn);
+            if (isNaN(clockInDate.getTime())) {
+                throw new Error('Invalid clockIn date format');
+            }
+            fixedSession.clockIn = clockInDate.toISOString();
+        } catch (error) {
+            throw new Error(`Invalid clockIn date: ${fixedSession.clockIn}`);
+        }
+        
+        // Validate and fix clockOut date if present
+        if (fixedSession.clockOut) {
+            try {
+                const clockOutDate = new Date(fixedSession.clockOut);
+                if (isNaN(clockOutDate.getTime())) {
+                    throw new Error('Invalid clockOut date format');
+                }
+                fixedSession.clockOut = clockOutDate.toISOString();
+            } catch (error) {
+                console.warn(`Session ${index}: Invalid clockOut date, setting to null: ${fixedSession.clockOut}`);
+                fixedSession.clockOut = null;
+            }
+        }
+        
+        // Ensure duration is a number
+        if (typeof fixedSession.duration !== 'number') {
+            fixedSession.duration = 0;
+            console.warn(`Session ${index}: Invalid duration, setting to 0: ${fixedSession.duration}`);
+        }
+        
+        // Fix date field if needed
+        if (!fixedSession.date) {
+            const clockInDate = new Date(fixedSession.clockIn);
+            fixedSession.date = clockInDate.toDateString();
+        }
+        
+        return fixedSession;
     }
 
     parseCSV(content) {
@@ -1077,57 +1240,100 @@ class ClockInApp {
     }
 
     async handleImportData() {
-        if (!this.importData || !this.currentUser) return;
+        if (!this.importData || !this.currentUser) {
+            console.error('Import failed: No import data or current user');
+            this.showToast('Import failed: No data to import', 'error');
+            return;
+        }
         
         const overwrite = document.getElementById('importOverwrite').checked;
         const skipDuplicates = document.getElementById('importSkipDuplicates').checked;
+        
+        console.log('Starting import with settings:', {
+            overwrite,
+            skipDuplicates,
+            totalSessions: this.importData.sessions.length,
+            currentUser: this.currentUser.email
+        });
         
         try {
             let importedCount = 0;
             let skippedCount = 0;
             let overwrittenCount = 0;
+            let errorCount = 0;
             
-            for (const session of this.importData.sessions) {
-                // Set the user ID to current user
-                const sessionToImport = {
-                    ...session,
-                    userId: this.currentUser.email
-                };
+            // Show progress
+            const importBtn = document.getElementById('importDataBtn');
+            const originalText = importBtn.textContent;
+            importBtn.disabled = true;
+            importBtn.textContent = 'Importing...';
+            
+            for (let i = 0; i < this.importData.sessions.length; i++) {
+                const session = this.importData.sessions[i];
                 
-                // Check for duplicates if skipDuplicates is enabled
-                if (skipDuplicates) {
+                try {
+                    // Set the user ID to current user
+                    const sessionToImport = {
+                        ...session,
+                        userId: this.currentUser.email
+                    };
+                    
+                    console.log(`Processing session ${i + 1}/${this.importData.sessions.length}:`, {
+                        clockIn: sessionToImport.clockIn,
+                        clockOut: sessionToImport.clockOut,
+                        duration: sessionToImport.duration
+                    });
+                    
+                    // Check for duplicates if skipDuplicates is enabled
+                    if (skipDuplicates) {
+                        const existingSessions = await this.getSessions(this.currentUser.email);
+                        const isDuplicate = existingSessions.some(existing => 
+                            existing.clockIn === sessionToImport.clockIn &&
+                            existing.clockOut === sessionToImport.clockOut
+                        );
+                        
+                        if (isDuplicate) {
+                            console.log(`Skipping duplicate session ${i + 1}`);
+                            skippedCount++;
+                            continue;
+                        }
+                    }
+                    
+                    // Check if session already exists (for overwrite logic)
                     const existingSessions = await this.getSessions(this.currentUser.email);
-                    const isDuplicate = existingSessions.some(existing => 
-                        existing.clockIn === sessionToImport.clockIn &&
-                        existing.clockOut === sessionToImport.clockOut
+                    const existingSession = existingSessions.find(existing => 
+                        existing.clockIn === sessionToImport.clockIn
                     );
                     
-                    if (isDuplicate) {
+                    if (existingSession && overwrite) {
+                        // Update existing session
+                        sessionToImport.id = existingSession.id;
+                        await this.updateSession(sessionToImport);
+                        overwrittenCount++;
+                        console.log(`Updated existing session ${i + 1}`);
+                    } else if (!existingSession) {
+                        // Add new session
+                        const sessionId = await this.saveSession(sessionToImport);
+                        importedCount++;
+                        console.log(`Imported new session ${i + 1} with ID: ${sessionId}`);
+                    } else {
+                        // Skip if exists and not overwriting
                         skippedCount++;
-                        continue;
+                        console.log(`Skipped existing session ${i + 1} (no overwrite)`);
                     }
-                }
-                
-                // Check if session already exists (for overwrite logic)
-                const existingSessions = await this.getSessions(this.currentUser.email);
-                const existingSession = existingSessions.find(existing => 
-                    existing.clockIn === sessionToImport.clockIn
-                );
-                
-                if (existingSession && overwrite) {
-                    // Update existing session
-                    sessionToImport.id = existingSession.id;
-                    await this.updateSession(sessionToImport);
-                    overwrittenCount++;
-                } else if (!existingSession) {
-                    // Add new session
-                    await this.saveSession(sessionToImport);
-                    importedCount++;
-                } else {
-                    // Skip if exists and not overwriting
-                    skippedCount++;
+                    
+                    // Update progress
+                    importBtn.textContent = `Importing... ${i + 1}/${this.importData.sessions.length}`;
+                    
+                } catch (sessionError) {
+                    console.error(`Error processing session ${i + 1}:`, sessionError);
+                    errorCount++;
                 }
             }
+            
+            // Reset button
+            importBtn.disabled = false;
+            importBtn.textContent = originalText;
             
             // Refresh the display
             this.loadSessions();
@@ -1137,13 +1343,27 @@ class ClockInApp {
             let message = `Import completed! `;
             if (importedCount > 0) message += `Imported: ${importedCount} `;
             if (overwrittenCount > 0) message += `Updated: ${overwrittenCount} `;
-            if (skippedCount > 0) message += `Skipped: ${skippedCount}`;
+            if (skippedCount > 0) message += `Skipped: ${skippedCount} `;
+            if (errorCount > 0) message += `Errors: ${errorCount}`;
+            
+            console.log('Import results:', {
+                imported: importedCount,
+                updated: overwrittenCount,
+                skipped: skippedCount,
+                errors: errorCount
+            });
             
             this.showToast(message);
             this.hideImportModal();
             
         } catch (error) {
+            console.error('Import failed:', error);
             this.showToast('Import failed: ' + error.message, 'error');
+            
+            // Reset button
+            const importBtn = document.getElementById('importDataBtn');
+            importBtn.disabled = false;
+            importBtn.textContent = 'Import Data';
         }
     }
 
@@ -1187,6 +1407,12 @@ class ClockInApp {
 
     // Add sample data for testing
     async addSampleData() {
+        // Check if sample data should be created
+        const sampleDataCreated = this.getFromLocalStorage('sampleDataCreated');
+        if (sampleDataCreated) {
+            console.log('Sample data already created, skipping...');
+            return;
+        }
         try {
             // Create or update John Mark's user account
             const johnMarkUser = {
@@ -1232,62 +1458,175 @@ class ClockInApp {
             } else {
                 console.log('Today\'s session already exists for John Mark');
             }
+            
+            // Mark sample data as created
+            this.saveToLocalStorage('sampleDataCreated', true);
         } catch (error) {
             console.error('Error adding sample data:', error);
         }
     }
 
-    // Streak calculation methods
+    // Internship progress calculation methods
     updateStreakDisplay(sessions) {
-        const { currentStreak, longestStreak, activityData } = this.calculateStreaks(sessions);
+        const { internshipProgress, totalDays, activityData } = this.calculateInternshipProgress(sessions);
         
-        // Update streak numbers
-        document.getElementById('currentStreak').textContent = currentStreak;
-        document.getElementById('longestStreak').textContent = longestStreak;
+        // Update progress numbers
+        document.getElementById('currentStreak').textContent = internshipProgress;
+        document.getElementById('longestStreak').textContent = totalDays;
         
-        // Update streak calendar
-        this.displayStreakCalendar(activityData);
+        // Update progress calendar
+        this.displayInternshipProgressCalendar(activityData);
     }
 
-    calculateStreaks(sessions) {
+    calculateInternshipProgress(sessions) {
         const today = new Date();
         const activityData = this.getActivityData(sessions);
         
-        let currentStreak = 0;
-        let longestStreak = 0;
-        let tempStreak = 0;
+        // Internship settings - get from localStorage or use defaults
+        const GOAL_DAYS = this.getGoalDays(); // Get from localStorage or default
+        const START_DATE = this.getInternshipStartDate(); // Get from localStorage or default
         
-        // Calculate streaks (going backwards from today, only business days)
-        for (let i = 83; i >= 0; i--) { // Check last 84 days
-            const date = new Date(today);
-            date.setDate(date.getDate() - i);
+        let internshipProgress = 0;
+        let totalDays = 0;
+        
+        // Calculate progress from start date to today
+        const daysSinceStart = Math.floor((today - START_DATE) / (1000 * 60 * 60 * 24));
+        
+        // Count business days with activity
+        for (let i = 0; i <= Math.min(daysSinceStart, GOAL_DAYS - 1); i++) {
+            const date = new Date(START_DATE);
+            date.setDate(START_DATE.getDate() + i);
             const dateString = date.toDateString();
             
             // Only count business days (Monday = 1, Tuesday = 2, ..., Friday = 5)
             const dayOfWeek = date.getDay();
             const isBusinessDay = dayOfWeek >= 1 && dayOfWeek <= 5;
             
-            if (isBusinessDay && activityData[dateString]) {
-                tempStreak++;
-                if (i === 0) { // Today
-                    currentStreak = tempStreak;
+            if (isBusinessDay) {
+                totalDays++;
+                if (activityData[dateString]) {
+                    internshipProgress++;
                 }
-            } else if (isBusinessDay && !activityData[dateString]) {
-                // Business day with no activity - break the streak
-                if (tempStreak > longestStreak) {
-                    longestStreak = tempStreak;
-                }
-                tempStreak = 0;
             }
-            // Weekend days are ignored for streak calculation
         }
         
-        // Check if the longest streak extends beyond the current streak
-        if (tempStreak > longestStreak) {
-            longestStreak = tempStreak;
+        return { internshipProgress, totalDays: GOAL_DAYS, activityData };
+    }
+    
+    getInternshipStartDate() {
+        // Get start date from localStorage or use default
+        const savedStartDate = this.getFromLocalStorage('internshipStartDate');
+        if (savedStartDate) {
+            return new Date(savedStartDate);
         }
         
-        return { currentStreak, longestStreak, activityData };
+        // Default start date (you can change this)
+        return new Date('2025-01-01');
+    }
+    
+    setInternshipStartDate(startDate) {
+        this.saveToLocalStorage('internshipStartDate', startDate.toISOString());
+    }
+    
+    getGoalDays() {
+        // Get goal days from localStorage or use default
+        const savedGoalDays = this.getFromLocalStorage('goalDays');
+        if (savedGoalDays) {
+            return parseInt(savedGoalDays);
+        }
+        
+        // Default goal days
+        return 61;
+    }
+    
+    setGoalDays(goalDays) {
+        this.saveToLocalStorage('goalDays', goalDays.toString());
+    }
+    
+    // Internship Date Modal methods
+    showInternshipDateModal() {
+        const modal = document.getElementById('internshipDateModal');
+        const dateInput = document.getElementById('internshipStartDate');
+        
+        // Set current value if exists
+        const currentStartDate = this.getInternshipStartDate();
+        dateInput.value = currentStartDate.toISOString().split('T')[0];
+        
+        modal.classList.remove('hidden');
+    }
+    
+    hideInternshipDateModal() {
+        const modal = document.getElementById('internshipDateModal');
+        modal.classList.add('hidden');
+        
+        // Reset form
+        document.getElementById('internshipDateForm').reset();
+    }
+    
+    async handleInternshipDateSubmit(e) {
+        e.preventDefault();
+        
+        const startDate = document.getElementById('internshipStartDate').value;
+        
+        if (!startDate) {
+            this.showToast('Please select a start date', 'error');
+            return;
+        }
+        
+        try {
+            const date = new Date(startDate);
+            this.setInternshipStartDate(date);
+            
+            this.hideInternshipDateModal();
+            this.loadSessions(); // Refresh to update progress
+            this.showToast('Internship start date updated successfully!');
+            
+        } catch (error) {
+            this.showToast('Failed to set start date: ' + error.message, 'error');
+        }
+    }
+    
+    // Goal Days Modal methods
+    showGoalDaysModal() {
+        const modal = document.getElementById('goalDaysModal');
+        const goalDaysInput = document.getElementById('goalDays');
+        
+        // Set current value if exists
+        const currentGoalDays = this.getGoalDays();
+        goalDaysInput.value = currentGoalDays;
+        
+        modal.classList.remove('hidden');
+    }
+    
+    hideGoalDaysModal() {
+        const modal = document.getElementById('goalDaysModal');
+        modal.classList.add('hidden');
+        
+        // Reset form
+        document.getElementById('goalDaysForm').reset();
+    }
+    
+    async handleGoalDaysSubmit(e) {
+        e.preventDefault();
+        
+        const goalDays = document.getElementById('goalDays').value;
+        
+        if (!goalDays || goalDays < 1) {
+            this.showToast('Please enter a valid number of goal days', 'error');
+            return;
+        }
+        
+        try {
+            const days = parseInt(goalDays);
+            this.setGoalDays(days);
+            
+            this.hideGoalDaysModal();
+            this.loadSessions(); // Refresh to update progress
+            this.showToast('Goal days updated successfully!');
+            
+        } catch (error) {
+            this.showToast('Failed to set goal days: ' + error.message, 'error');
+        }
     }
 
     getActivityData(sessions) {
@@ -1305,47 +1644,126 @@ class ClockInApp {
         return activityData;
     }
 
-    displayStreakCalendar(activityData) {
+    displayInternshipProgressCalendar(activityData) {
         const calendarContainer = document.getElementById('streakCalendar');
         calendarContainer.innerHTML = '';
         
+        // Internship settings
+        const GOAL_DAYS = this.getGoalDays();
+        const START_DATE = this.getInternshipStartDate();
         const today = new Date();
         
-        // Create a 7x12 grid (7 columns for days of week, 12 rows = 84 days)
-        // Start from today and go backwards to show the last 84 days
-        for (let row = 0; row < 12; row++) {
-            for (let col = 0; col < 7; col++) {
-                // Calculate the date for this position
-                // Start from today and go backwards
-                const daysBack = row * 7 + col; // This will make today appear in top-left
-                const currentDate = new Date(today);
-                currentDate.setDate(today.getDate() - daysBack);
+        // Create a dynamic grid based on goal days
+        const COLS = 10;
+        const ROWS = Math.ceil(GOAL_DAYS / COLS);
+        
+        // Create container for the grid
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'flex flex-col items-center';
+        calendarContainer.appendChild(gridContainer);
+        
+        // Create the 10x6 grid
+        for (let row = 0; row < ROWS; row++) {
+            const weekRow = document.createElement('div');
+            weekRow.className = 'flex mb-1 justify-center';
+            
+            for (let col = 0; col < COLS; col++) {
+                // Calculate the business day offset
+                const businessDayOffset = row * COLS + col;
                 
-                const dateString = currentDate.toDateString();
-                const square = document.createElement('div');
-                square.className = 'github-activity-day';
+                // Calculate the actual date by skipping weekends
+                let currentDate = new Date(START_DATE);
+                let daysToAdd = 0;
+                let businessDaysAdded = 0;
                 
-                if (activityData[dateString]) {
-                    // Active day - GitHub-style green colors based on activity level
-                    const hours = activityData[dateString].hours;
-                    if (hours >= 8) {
-                        square.className += ' active-4'; // High activity - darkest green
-                    } else if (hours >= 4) {
-                        square.className += ' active-3'; // Medium activity
-                    } else if (hours >= 1) {
-                        square.className += ' active-2'; // Low activity
-                    } else {
-                        square.className += ' active-1'; // Very low activity - lightest green
+                while (businessDaysAdded < businessDayOffset) {
+                    daysToAdd++;
+                    const checkDate = new Date(START_DATE);
+                    checkDate.setDate(START_DATE.getDate() + daysToAdd);
+                    const dayOfWeek = checkDate.getDay();
+                    
+                    // Only count business days (Monday = 1, Tuesday = 2, ..., Friday = 5)
+                    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+                        businessDaysAdded++;
                     }
                 }
                 
-                // Add tooltip with GitHub-style information
-                const hoursText = activityData[dateString] ? Math.round(activityData[dateString].hours * 10) / 10 + ' hours worked' : 'No activity';
-                square.title = `${currentDate.toLocaleDateString()}: ${hoursText}`;
+                currentDate.setDate(START_DATE.getDate() + daysToAdd);
+                const dateString = currentDate.toDateString();
+                const square = document.createElement('div');
+                square.className = 'github-activity-day mr-1';
                 
-                calendarContainer.appendChild(square);
+                // Check if this is within internship period
+                const isWithinInternship = businessDayOffset < GOAL_DAYS;
+                
+                if (isWithinInternship) {
+                    if (activityData[dateString]) {
+                        // Completed internship day - green color
+                        const hours = activityData[dateString].hours;
+                        if (hours >= 8) {
+                            square.className += ' active-4'; // Full day - darkest green
+                        } else if (hours >= 4) {
+                            square.className += ' active-3'; // Half day - medium green
+                        } else {
+                            square.className += ' active-2'; // Partial day - light green
+                        }
+                        
+                        // Add tooltip with internship progress info
+                        const progressDay = businessDayOffset + 1;
+                        square.title = `${currentDate.toLocaleDateString()}: Internship Day ${progressDay}/${GOAL_DAYS} - ${Math.round(hours * 10) / 10}h worked`;
+                    } else {
+                        // Future internship day - gray color (no missed days)
+                        square.className += ' future-day';
+                        const progressDay = businessDayOffset + 1;
+                        square.title = `${currentDate.toLocaleDateString()}: Future Internship Day ${progressDay}/${GOAL_DAYS}`;
+                    }
+                } else {
+                    // Outside internship period - light gray
+                    square.className += ' weekend-day';
+                    square.title = `${currentDate.toLocaleDateString()}: Outside Internship Period`;
+                }
+                
+                weekRow.appendChild(square);
             }
+            
+            gridContainer.appendChild(weekRow);
         }
+    }
+    
+    addInternshipLegend() {
+        const calendarContainer = document.getElementById('streakCalendar');
+        
+        // Remove existing legend if it exists
+        const existingLegend = document.getElementById('internshipLegend');
+        if (existingLegend) {
+            existingLegend.remove();
+        }
+        
+        const legend = document.createElement('div');
+        legend.id = 'internshipLegend';
+        legend.className = 'internship-legend mt-4 text-xs';
+        legend.innerHTML = `
+            <div class="flex items-center justify-center space-x-3">
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-green-600 rounded mr-1"></div>
+                    <span>Completed</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-red-500 rounded mr-1"></div>
+                    <span>Missed</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-gray-300 rounded mr-1"></div>
+                    <span>Future</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-gray-100 rounded mr-1"></div>
+                    <span>Outside</span>
+                </div>
+            </div>
+        `;
+        
+        calendarContainer.appendChild(legend);
     }
 
     // Theme management methods
