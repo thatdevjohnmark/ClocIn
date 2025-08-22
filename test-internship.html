@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internship Progress Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Internship Progress Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Actions</h2>
+        <button onclick="runTests()">Run All Tests</button>
+        <button onclick="clearStorage()">Clear localStorage</button>
+        <button onclick="setTestData()">Set Test Data</button>
+        <button onclick="checkStorage()">Check localStorage</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Info</h2>
+        <pre id="debugInfo"></pre>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            results.appendChild(div);
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').innerHTML = '';
+        }
+
+        function runTests() {
+            clearResults();
+            log('Starting internship progress tests...', 'info');
+            
+            // Test 1: Check localStorage availability
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+                log('✓ localStorage is available', 'success');
+            } catch (error) {
+                log('✗ localStorage is not available: ' + error.message, 'error');
+                return;
+            }
+            
+            // Test 2: Check default values
+            const startDate = getInternshipStartDate();
+            const goalDays = getGoalDays();
+            
+            log(`Default start date: ${startDate.toDateString()}`, 'info');
+            log(`Default goal days: ${goalDays}`, 'info');
+            
+            // Test 3: Check if start date is in the past
+            const today = new Date();
+            if (startDate < today) {
+                log('✓ Start date is in the past (good for progress calculation)', 'success');
+            } else {
+                log('✗ Start date is in the future (will show 0 progress)', 'error');
+            }
+            
+            // Test 4: Test business day calculation
+            const businessDays = calculateBusinessDays(startDate, today);
+            log(`Business days since start: ${businessDays}`, 'info');
+            
+            // Test 5: Test date parsing
+            try {
+                const testDate = new Date('2024-01-15');
+                if (!isNaN(testDate.getTime())) {
+                    log('✓ Date parsing works correctly', 'success');
+                } else {
+                    log('✗ Date parsing failed', 'error');
+                }
+            } catch (error) {
+                log('✗ Date parsing error: ' + error.message, 'error');
+            }
+            
+            log('Tests completed!', 'info');
+        }
+
+        function clearStorage() {
+            try {
+                localStorage.clear();
+                log('✓ localStorage cleared', 'success');
+            } catch (error) {
+                log('✗ Failed to clear localStorage: ' + error.message, 'error');
+            }
+        }
+
+        function setTestData() {
+            try {
+                // Set test internship data
+                localStorage.setItem('internshipStartDate', '2024-01-15T00:00:00.000Z');
+                localStorage.setItem('goalDays', '61');
+                localStorage.setItem('currentUser', JSON.stringify({
+                    name: 'Test User',
+                    email: 'test@example.com'
+                }));
+                log('✓ Test data set successfully', 'success');
+            } catch (error) {
+                log('✗ Failed to set test data: ' + error.message, 'error');
+            }
+        }
+
+        function checkStorage() {
+            const debugInfo = document.getElementById('debugInfo');
+            const info = {
+                internshipStartDate: localStorage.getItem('internshipStartDate'),
+                goalDays: localStorage.getItem('goalDays'),
+                currentUser: localStorage.getItem('currentUser'),
+                allKeys: Object.keys(localStorage)
+            };
+            
+            debugInfo.textContent = JSON.stringify(info, null, 2);
+            log('Storage info displayed below', 'info');
+        }
+
+        // Helper functions (copied from app.js logic)
+        function getInternshipStartDate() {
+            const savedStartDate = localStorage.getItem('internshipStartDate');
+            if (savedStartDate) {
+                try {
+                    const date = new Date(savedStartDate);
+                    if (!isNaN(date.getTime())) {
+                        return date;
+                    }
+                } catch (error) {
+                    console.warn('Invalid internship start date in localStorage:', error);
+                }
+            }
+            return new Date('2024-01-15');
+        }
+
+        function getGoalDays() {
+            const savedGoalDays = localStorage.getItem('goalDays');
+            if (savedGoalDays) {
+                try {
+                    const days = parseInt(savedGoalDays);
+                    if (!isNaN(days) && days > 0) {
+                        return days;
+                    }
+                } catch (error) {
+                    console.warn('Invalid goal days in localStorage:', error);
+                }
+            }
+            return 61;
+        }
+
+        function calculateBusinessDays(startDate, endDate) {
+            let businessDays = 0;
+            const current = new Date(startDate);
+            
+            while (current <= endDate) {
+                const dayOfWeek = current.getDay();
+                if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday to Friday
+                    businessDays++;
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            
+            return businessDays;
+        }
+
+        // Run initial check
+        window.addEventListener('load', () => {
+            log('Test page loaded. Click "Run All Tests" to start testing.', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -102,6 +102,10 @@ class ClockInApp {
         document.getElementById('closeGoalDaysBtn').addEventListener('click', () => this.hideGoalDaysModal());
         document.getElementById('goalDaysForm').addEventListener('submit', (e) => this.handleGoalDaysSubmit(e));
         
+        // Debug and Reset buttons
+        document.getElementById('debugInternshipBtn').addEventListener('click', () => this.debugInternshipProgress());
+        document.getElementById('resetInternshipBtn').addEventListener('click', () => this.resetInternshipSettings());
+        
         // Dark mode toggle
         document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
     }
@@ -292,7 +296,13 @@ class ClockInApp {
             const index = store.index('userId');
             const request = index.getAll(userId, limit);
             
-            request.onsuccess = () => resolve(request.result);
+            request.onsuccess = () => {
+                // Sort sessions by clockIn date in descending order (latest first)
+                const sessions = request.result.sort((a, b) => {
+                    return new Date(b.clockIn) - new Date(a.clockIn);
+                });
+                resolve(sessions);
+            };
             request.onerror = () => reject(request.error);
         });
     }
@@ -1466,16 +1476,94 @@ class ClockInApp {
         }
     }
 
+    // Reset internship settings
+    resetInternshipSettings() {
+        try {
+            this.removeFromLocalStorage('internshipStartDate');
+            this.removeFromLocalStorage('goalDays');
+            this.showToast('Internship settings reset to defaults', 'warning');
+            
+            // Refresh the display
+            if (this.currentUser) {
+                this.loadSessions();
+            }
+        } catch (error) {
+            console.error('Error resetting internship settings:', error);
+            this.showToast('Failed to reset internship settings', 'error');
+        }
+    }
+
+    // Debug internship progress
+    debugInternshipProgress() {
+        try {
+            const startDate = this.getInternshipStartDate();
+            const goalDays = this.getGoalDays();
+            const today = new Date();
+            
+            console.log('=== INTERNSHIP PROGRESS DEBUG ===');
+            console.log('Start Date:', startDate.toDateString());
+            console.log('Goal Days:', goalDays);
+            console.log('Today:', today.toDateString());
+            console.log('Days since start:', Math.floor((today - startDate) / (1000 * 60 * 60 * 24)));
+            console.log('Current User:', this.currentUser);
+            
+            if (this.currentUser) {
+                this.getSessions(this.currentUser.email).then(sessions => {
+                    console.log('Total Sessions:', sessions.length);
+                    console.log('Sample Sessions:', sessions.slice(0, 3));
+                    
+                    const activityData = this.getActivityData(sessions);
+                    console.log('Activity Data Keys:', Object.keys(activityData));
+                    console.log('Sample Activity Data:', Object.entries(activityData).slice(0, 3));
+                });
+            }
+            
+            console.log('=== END DEBUG ===');
+            
+            this.showToast('Debug info logged to console', 'success');
+        } catch (error) {
+            console.error('Debug error:', error);
+            this.showToast('Debug failed: ' + error.message, 'error');
+        }
+    }
+
     // Internship progress calculation methods
     updateStreakDisplay(sessions) {
-        const { internshipProgress, totalDays, activityData } = this.calculateInternshipProgress(sessions);
-        
-        // Update progress numbers
-        document.getElementById('currentStreak').textContent = internshipProgress;
-        document.getElementById('longestStreak').textContent = totalDays;
-        
-        // Update progress calendar
-        this.displayInternshipProgressCalendar(activityData);
+        try {
+            const { internshipProgress, totalDays, activityData } = this.calculateInternshipProgress(sessions);
+            
+            // Debug logging
+            console.log('Internship Progress Debug:', {
+                sessions: sessions.length,
+                internshipProgress,
+                totalDays,
+                activityDataKeys: Object.keys(activityData).length,
+                startDate: this.getInternshipStartDate(),
+                goalDays: this.getGoalDays(),
+                today: new Date().toDateString()
+            });
+            
+            // Update progress numbers
+            const currentStreakElement = document.getElementById('currentStreak');
+            const longestStreakElement = document.getElementById('longestStreak');
+            
+            if (currentStreakElement) {
+                currentStreakElement.textContent = internshipProgress;
+            }
+            if (longestStreakElement) {
+                longestStreakElement.textContent = totalDays;
+            }
+            
+            // Update progress calendar
+            this.displayInternshipProgressCalendar(activityData);
+            
+            // Update Activity Tracker with real data
+            this.updateActivityTracker(internshipProgress);
+            
+        } catch (error) {
+            console.error('Error updating internship progress:', error);
+            this.showToast('Error updating internship progress', 'error');
+        }
     }
 
     calculateInternshipProgress(sessions) {
@@ -1487,28 +1575,19 @@ class ClockInApp {
         const START_DATE = this.getInternshipStartDate(); // Get from localStorage or default
         
         let internshipProgress = 0;
-        let totalDays = 0;
         
-        // Calculate progress from start date to today
-        const daysSinceStart = Math.floor((today - START_DATE) / (1000 * 60 * 60 * 24));
-        
-        // Count business days with activity
-        for (let i = 0; i <= Math.min(daysSinceStart, GOAL_DAYS - 1); i++) {
-            const date = new Date(START_DATE);
-            date.setDate(START_DATE.getDate() + i);
-            const dateString = date.toDateString();
+        // Only count completed days (days with activity)
+        Object.keys(activityData).forEach(dateString => {
+            const date = new Date(dateString);
             
             // Only count business days (Monday = 1, Tuesday = 2, ..., Friday = 5)
             const dayOfWeek = date.getDay();
             const isBusinessDay = dayOfWeek >= 1 && dayOfWeek <= 5;
             
             if (isBusinessDay) {
-                totalDays++;
-                if (activityData[dateString]) {
-                    internshipProgress++;
-                }
+                internshipProgress++;
             }
-        }
+        });
         
         return { internshipProgress, totalDays: GOAL_DAYS, activityData };
     }
@@ -1517,22 +1596,41 @@ class ClockInApp {
         // Get start date from localStorage or use default
         const savedStartDate = this.getFromLocalStorage('internshipStartDate');
         if (savedStartDate) {
-            return new Date(savedStartDate);
+            try {
+                const date = new Date(savedStartDate);
+                if (!isNaN(date.getTime())) {
+                    return date;
+                }
+            } catch (error) {
+                console.warn('Invalid internship start date in localStorage:', error);
+            }
         }
         
-        // Default start date (you can change this)
-        return new Date('2025-01-01');
+        // Default start date - set to a past date so progress can be calculated
+        return new Date('2024-01-15'); // Changed from 2025-01-01 to 2024-01-15
     }
     
     setInternshipStartDate(startDate) {
-        this.saveToLocalStorage('internshipStartDate', startDate.toISOString());
+        try {
+            this.saveToLocalStorage('internshipStartDate', startDate.toISOString());
+        } catch (error) {
+            console.error('Failed to save internship start date:', error);
+            this.showToast('Failed to save start date', 'error');
+        }
     }
     
     getGoalDays() {
         // Get goal days from localStorage or use default
         const savedGoalDays = this.getFromLocalStorage('goalDays');
         if (savedGoalDays) {
-            return parseInt(savedGoalDays);
+            try {
+                const days = parseInt(savedGoalDays);
+                if (!isNaN(days) && days > 0) {
+                    return days;
+                }
+            } catch (error) {
+                console.warn('Invalid goal days in localStorage:', error);
+            }
         }
         
         // Default goal days
@@ -1540,7 +1638,12 @@ class ClockInApp {
     }
     
     setGoalDays(goalDays) {
-        this.saveToLocalStorage('goalDays', goalDays.toString());
+        try {
+            this.saveToLocalStorage('goalDays', goalDays.toString());
+        } catch (error) {
+            console.error('Failed to save goal days:', error);
+            this.showToast('Failed to save goal days', 'error');
+        }
     }
     
     // Internship Date Modal methods
@@ -1645,89 +1748,92 @@ class ClockInApp {
     }
 
     displayInternshipProgressCalendar(activityData) {
-        const calendarContainer = document.getElementById('streakCalendar');
-        calendarContainer.innerHTML = '';
-        
-        // Internship settings
-        const GOAL_DAYS = this.getGoalDays();
-        const START_DATE = this.getInternshipStartDate();
-        const today = new Date();
-        
-        // Create a dynamic grid based on goal days
-        const COLS = 10;
-        const ROWS = Math.ceil(GOAL_DAYS / COLS);
-        
-        // Create container for the grid
-        const gridContainer = document.createElement('div');
-        gridContainer.className = 'flex flex-col items-center';
-        calendarContainer.appendChild(gridContainer);
-        
-        // Create the 10x6 grid
-        for (let row = 0; row < ROWS; row++) {
-            const weekRow = document.createElement('div');
-            weekRow.className = 'flex mb-1 justify-center';
-            
-            for (let col = 0; col < COLS; col++) {
-                // Calculate the business day offset
-                const businessDayOffset = row * COLS + col;
-                
-                // Calculate the actual date by skipping weekends
-                let currentDate = new Date(START_DATE);
-                let daysToAdd = 0;
-                let businessDaysAdded = 0;
-                
-                while (businessDaysAdded < businessDayOffset) {
-                    daysToAdd++;
-                    const checkDate = new Date(START_DATE);
-                    checkDate.setDate(START_DATE.getDate() + daysToAdd);
-                    const dayOfWeek = checkDate.getDay();
-                    
-                    // Only count business days (Monday = 1, Tuesday = 2, ..., Friday = 5)
-                    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-                        businessDaysAdded++;
-                    }
-                }
-                
-                currentDate.setDate(START_DATE.getDate() + daysToAdd);
-                const dateString = currentDate.toDateString();
-                const square = document.createElement('div');
-                square.className = 'github-activity-day mr-1';
-                
-                // Check if this is within internship period
-                const isWithinInternship = businessDayOffset < GOAL_DAYS;
-                
-                if (isWithinInternship) {
-                    if (activityData[dateString]) {
-                        // Completed internship day - green color
-                        const hours = activityData[dateString].hours;
-                        if (hours >= 8) {
-                            square.className += ' active-4'; // Full day - darkest green
-                        } else if (hours >= 4) {
-                            square.className += ' active-3'; // Half day - medium green
-                        } else {
-                            square.className += ' active-2'; // Partial day - light green
-                        }
-                        
-                        // Add tooltip with internship progress info
-                        const progressDay = businessDayOffset + 1;
-                        square.title = `${currentDate.toLocaleDateString()}: Internship Day ${progressDay}/${GOAL_DAYS} - ${Math.round(hours * 10) / 10}h worked`;
-                    } else {
-                        // Future internship day - gray color (no missed days)
-                        square.className += ' future-day';
-                        const progressDay = businessDayOffset + 1;
-                        square.title = `${currentDate.toLocaleDateString()}: Future Internship Day ${progressDay}/${GOAL_DAYS}`;
-                    }
-                } else {
-                    // Outside internship period - light gray
-                    square.className += ' weekend-day';
-                    square.title = `${currentDate.toLocaleDateString()}: Outside Internship Period`;
-                }
-                
-                weekRow.appendChild(square);
+        try {
+            const calendarContainer = document.getElementById('streakCalendar');
+            if (!calendarContainer) {
+                console.error('Calendar container not found');
+                return;
             }
             
-            gridContainer.appendChild(weekRow);
+            calendarContainer.innerHTML = '';
+            
+            // Internship settings
+            const GOAL_DAYS = this.getGoalDays();
+            const START_DATE = this.getInternshipStartDate();
+            const today = new Date();
+            
+            // Debug logging
+            console.log('Calendar Debug:', {
+                GOAL_DAYS,
+                START_DATE: START_DATE.toDateString(),
+                today: today.toDateString(),
+                activityDataKeys: Object.keys(activityData)
+            });
+            
+            // Create a single row of exactly 10 squares for habit tracking
+            const TOTAL_SQUARES = 10;
+            
+            // Create container for the habit tracker
+            const trackerContainer = document.createElement('div');
+            trackerContainer.className = 'flex justify-center items-center';
+            calendarContainer.appendChild(trackerContainer);
+            
+            // Calculate total completed days (not consecutive)
+            const completedDays = this.calculateTotalCompletedDays(activityData, START_DATE, today);
+            
+            // Calculate how many squares should be filled based on progress toward goal
+            const progressRatio = Math.min(completedDays / GOAL_DAYS, 1); // Cap at 100%
+            const filledSquares = Math.floor(progressRatio * TOTAL_SQUARES);
+            
+            // Create the 10-square habit tracker
+            for (let i = 0; i < TOTAL_SQUARES; i++) {
+                const square = document.createElement('div');
+                // Add margin-right to all squares except the last one
+                square.className = i < TOTAL_SQUARES - 1 ? 'github-activity-day mr-1' : 'github-activity-day';
+                
+                if (i < filledSquares) {
+                    // Completed day - show green square
+                    square.className += ' active-4'; // Darkest green for completed days
+                    square.title = `Progress: ${completedDays}/${GOAL_DAYS} days completed`;
+                } else {
+                    // Future day - show empty/transparent square
+                    square.title = `Progress: ${completedDays}/${GOAL_DAYS} days completed`;
+                }
+                
+                trackerContainer.appendChild(square);
+            }
+            
+        } catch (error) {
+            console.error('Error displaying habit tracker:', error);
+            const calendarContainer = document.getElementById('streakCalendar');
+            if (calendarContainer) {
+                calendarContainer.innerHTML = '<div class="text-red-500 text-sm">Error loading habit tracker</div>';
+            }
         }
+    }
+    
+    calculateTotalCompletedDays(activityData, startDate, today) {
+        let completedDays = 0;
+        const daysSinceStart = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+        
+        // Check each day from start date up to today
+        for (let i = 0; i <= daysSinceStart; i++) {
+            const date = new Date(startDate);
+            date.setDate(startDate.getDate() + i);
+            
+            const dateString = date.toDateString();
+            const dayOfWeek = date.getDay();
+            
+            // Only count business days (Monday = 1, Tuesday = 2, ..., Friday = 5)
+            const isBusinessDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+            
+            if (isBusinessDay && activityData[dateString]) {
+                // Day has activity - count it as completed
+                completedDays++;
+            }
+        }
+        
+        return completedDays;
     }
     
     addInternshipLegend() {
@@ -1794,10 +1900,230 @@ class ClockInApp {
         }
     }
 
+    updateActivityTracker(internshipProgress) {
+        if (this.activityTracker) {
+            // Update the Activity Tracker with real internship progress data
+            this.activityTracker.goal = this.getGoalDays();
+            this.activityTracker.completed = internshipProgress;
+            this.activityTracker.updateDisplay();
+        }
+    }
 
+    // Activity Tracker methods
+    initActivityTracker() {
+        this.activityTracker = new ActivityTracker();
+    }
+
+}
+
+// Activity Tracker Class
+class ActivityTracker {
+    constructor() {
+        this.totalSquares = 70;
+        this.rows = 7;
+        this.cols = 10;
+        this.goal = 0;
+        this.completed = 0;
+        
+        this.init();
+    }
+
+    init() {
+        this.createGrid();
+        this.setupEventListeners();
+        this.updateFromInternshipProgress();
+    }
+
+    updateFromInternshipProgress() {
+        // Get actual internship progress data
+        const goalDays = this.getGoalDays();
+        const completedDays = this.getCompletedDays();
+        
+        this.goal = goalDays;
+        this.completed = completedDays;
+        
+        this.updateDisplay();
+    }
+
+    getGoalDays() {
+        // Get goal days from localStorage or use default
+        const savedGoalDays = localStorage.getItem('goalDays');
+        if (savedGoalDays) {
+            try {
+                const days = parseInt(savedGoalDays);
+                if (!isNaN(days) && days > 0) {
+                    return Math.min(days, 70); // Cap at 70 for the grid
+                }
+            } catch (error) {
+                console.warn('Invalid goal days in localStorage:', error);
+            }
+        }
+        return 61; // Default
+    }
+
+    getCompletedDays() {
+        // Get completed days from the main app's internship progress
+        // This should be calculated from actual session data
+        const currentUser = localStorage.getItem('currentUser');
+        if (!currentUser) return 0;
+        
+        try {
+            // For now, return 0 until we properly integrate with the main app
+            // This will be updated when we connect it to the actual session data
+            return 0;
+        } catch (error) {
+            console.error('Error getting completed days:', error);
+            return 0;
+        }
+    }
+
+    createGrid() {
+        const grid = document.getElementById('activityGrid');
+        if (!grid) return;
+        
+        grid.innerHTML = '';
+
+        for (let i = 0; i < this.totalSquares; i++) {
+            const square = document.createElement('div');
+            square.className = 'square';
+            square.dataset.index = i;
+            square.title = `Day ${i + 1}`;
+            grid.appendChild(square);
+        }
+    }
+
+    setupEventListeners() {
+        const goalInput = document.getElementById('trackerGoalInput');
+        const completedInput = document.getElementById('trackerCompletedInput');
+
+        if (goalInput) {
+            goalInput.addEventListener('input', (e) => {
+                this.handleGoalChange(e.target.value);
+            });
+        }
+
+        if (completedInput) {
+            completedInput.addEventListener('input', (e) => {
+                this.handleCompletedChange(e.target.value);
+            });
+        }
+
+        // Add click handlers for squares
+        const grid = document.getElementById('activityGrid');
+        if (grid) {
+            grid.addEventListener('click', (e) => {
+                if (e.target.classList.contains('square')) {
+                    this.handleSquareClick(e.target);
+                }
+            });
+        }
+    }
+
+    handleGoalChange(value) {
+        const goal = parseInt(value);
+        
+        if (isNaN(goal) || goal < 1 || goal > 70) {
+            return;
+        }
+        
+        this.goal = goal;
+        
+        // Adjust completed if it exceeds new goal
+        if (this.completed > goal) {
+            this.completed = goal;
+            const completedInput = document.getElementById('trackerCompletedInput');
+            if (completedInput) {
+                completedInput.value = goal;
+            }
+        }
+        
+        this.updateDisplay();
+    }
+
+    handleCompletedChange(value) {
+        const completed = parseInt(value);
+        
+        if (isNaN(completed) || completed < 0) {
+            return;
+        }
+        
+        if (completed > this.goal) {
+            return;
+        }
+        
+        this.completed = completed;
+        this.updateDisplay();
+    }
+
+    handleSquareClick(square) {
+        const index = parseInt(square.dataset.index);
+        
+        // Only allow clicking on active squares
+        if (index >= this.goal) return;
+        
+        // Toggle the clicked square and adjust completed count
+        if (square.classList.contains('filled')) {
+            // Unfill this square and all squares after it
+            this.completed = index;
+        } else {
+            // Fill this square and all squares before it
+            this.completed = index + 1;
+        }
+        
+        const completedInput = document.getElementById('trackerCompletedInput');
+        if (completedInput) {
+            completedInput.value = this.completed;
+        }
+        this.updateDisplay();
+    }
+
+    updateDisplay() {
+        // Update labels
+        const goalLabel = document.getElementById('trackerGoalLabel');
+        const completedLabel = document.getElementById('trackerCompletedLabel');
+        
+        if (goalLabel) goalLabel.textContent = this.goal;
+        if (completedLabel) completedLabel.textContent = this.completed;
+        
+        // Update squares
+        const squares = document.querySelectorAll('#activityGrid .square');
+        squares.forEach((square, index) => {
+            square.className = 'square';
+            
+            if (index < this.goal) {
+                // Active square
+                square.classList.add('active');
+                if (index < this.completed) {
+                    square.classList.add('filled');
+                }
+            } else {
+                // Disabled square
+                square.classList.add('disabled');
+            }
+        });
+        
+        // Update progress bar
+        const progressPercent = this.goal > 0 ? (this.completed / this.goal) * 100 : 0;
+        const progressFill = document.getElementById('trackerProgressFill');
+        if (progressFill) {
+            progressFill.style.width = `${progressPercent}%`;
+        }
+        
+        // Update stats
+        const progressPercentElement = document.getElementById('trackerProgressPercent');
+        const remainingDaysElement = document.getElementById('trackerRemainingDays');
+        
+        if (progressPercentElement) {
+            progressPercentElement.textContent = `${progressPercent.toFixed(1)}%`;
+        }
+        if (remainingDaysElement) {
+            remainingDaysElement.textContent = Math.max(0, this.goal - this.completed);
+        }
+    }
 }
 
 // Initialize the app when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new ClockInApp();
+    const app = new ClockInApp();
+    app.initActivityTracker();
 });
